@@ -2,14 +2,21 @@ import { GitHubConnector } from '../integrations/github.js';
 import { SlackConnector } from '../integrations/slack.js';
 import { NotionConnector } from '../integrations/notion.js';
 import { CalendarConnector } from '../integrations/calendar.js';
+import { WorkflowAutomation } from './workflow-automation.js';
+import { defaultWorkflowConfig } from '../config/workflow-config.js';
 import { logger } from '../utils/logger.js';
 
 export class WorkflowOrchestrator {
-  constructor() {
+  constructor(config = {}) {
     this.github = new GitHubConnector();
     this.slack = new SlackConnector();
     this.notion = new NotionConnector();
     this.calendar = new CalendarConnector();
+    this.automation = new WorkflowAutomation(this, config);
+    this.config = {
+      ...defaultWorkflowConfig,
+      ...config
+    };
     this.isInitialized = false;
   }
 
@@ -32,31 +39,67 @@ export class WorkflowOrchestrator {
       logger.info('Starting code review workflow', {
         requestId,
         repository: args.repository,
-        prNumber: args.pr_number
+        prNumber: args.pr_number,
+        issueNumber: args.issue_number
       });
 
-      const prDetails = await this.github.getPullRequest(
-        args.repository,
-        args.pr_number,
-        userContext.githubToken,
-        requestId
+      // 1. Get PR and related issue details
+      const [prDetails, issueDetails] = await Promise.all([
+        this.github.getPullRequest(
+          args.repository,
+          args.pr_number,
+          userContext.githubToken,
+          requestId
+        ),
+        this.github.getIssue(
+          args.repository,
+          args.issue_number,
+          userContext.githubToken,
+          requestId
+        )
+      ]);
+
+      // 2. Find optimal meeting time for all reviewers
+      const attendees = [
+        ...prDetails.requestedReviewers.map(r => r.email),
+        prDetails.author.email,
+        ...args.additional_attendees || []
+      ].filter(Boolean); // Remove any undefined emails
+
+      const meetingTime = await this.calendar.findOptimalTime(
+        attendees,
+        userContext.calendarToken,
+        requestId,
+        {
+          duration: args.duration || 30,
+          timeMin: new Date(Date.now() + 30 * 60 * 1000), // Start at least 30 mins from now
+          timeMax: new Date(Date.now() + 24 * 60 * 60 * 1000), // Within next 24 hours
+          workingHours: { start: 9, end: 17 },
+          bufferMinutes: 15
+        }
       );
 
+      // 3. Create Slack channel for discussion
       const channelData = {
-        name: `pr-${args.pr_number}-${prDetails.title}`,
+        name: `pr-${args.pr_number}-${prDetails.title.toLowerCase().replace(/[^a-z0-9-]/g, '-')}`.substring(0, 80),
         type: 'review',
-        topic: `Code review for PR #${args.pr_number}`,
-        purpose: `Review: ${prDetails.title}`,
+        topic: `Code review for PR #${args.pr_number}: ${prDetails.title}`,
+        purpose: `Review: ${prDetails.title} (Fixes #${args.issue_number})`,
         private: false,
-        members: [],
+        members: attendees.map(email => email.split('@')[0]), // Convert emails to Slack usernames
         context: {
           purpose: `Code review for ${args.repository} PR #${args.pr_number}`,
           prNumber: args.pr_number,
+          issueNumber: args.issue_number,
           repository: args.repository,
           links: [
             {
               title: `Pull Request #${args.pr_number}`,
               url: prDetails.urls.html
+            },
+            {
+              title: `Issue #${args.issue_number}`,
+              url: issueDetails.html_url
             }
           ]
         }
@@ -68,9 +111,138 @@ export class WorkflowOrchestrator {
         requestId
       );
 
-      await this.slack.sendPullRequestMessage(
+      // 4. Schedule Google Meet
+      const meeting = await this.calendar.createMeeting({
+        title: `Code Review: ${prDetails.title}`,
+        description: `Code review for PR #${args.pr_number} (Fixes #${args.issue_number})\n\n` +
+                    `Pull Request: ${prDetails.urls.html}\n` +
+                    `Issue: ${issueDetails.html_url}\n` +
+                    `Slack Channel: ${channel.webUrl}\n\n` +
+                    `Changes Summary:\n` +
+                    `- Files changed: ${prDetails.stats.changedFiles}\n` +
+                    `- Additions: +${prDetails.stats.additions}\n` +
+                    `- Deletions: -${prDetails.stats.deletions}\n\n` +
+                    `Please review the changes before the meeting.`,
+        startTime: meetingTime.start,
+        endTime: meetingTime.end,
+        attendees: attendees,
+        location: channel.webUrl, // Link to Slack channel
+        conferenceData: {
+          createRequest: { requestId: `pr-${args.pr_number}` }
+        }
+      }, userContext.calendarToken, requestId);
+
+      // 5. Create Notion page for meeting notes
+      const notionPage = await this.notion.createDocument(
+        process.env.NOTION_PROJECTS_DB_ID,
+        {
+          title: `Code Review: ${prDetails.title}`,
+          type: 'Meeting Notes',
+          content: `# Code Review Meeting Notes\n\n` +
+                  `## Pull Request Details\n` +
+                  `- PR: #${args.pr_number} - ${prDetails.title}\n` +
+                  `- Author: ${prDetails.author.name}\n` +
+                  `- Reviewers: ${prDetails.requestedReviewers.map(r => r.name).join(', ')}\n` +
+                  `- Issue: #${args.issue_number}\n\n` +
+                  `## Links\n` +
+                  `- [Pull Request](${prDetails.urls.html})\n` +
+                  `- [Issue](${issueDetails.html_url})\n` +
+                  `- [Slack Channel](${channel.webUrl})\n` +
+                  `- [Meeting Recording](TBD)\n\n` +
+                  `## Agenda\n` +
+                  `1. PR Overview by Author\n` +
+                  `2. Technical Implementation Review\n` +
+                  `3. Testing Strategy Discussion\n` +
+                  `4. Action Items\n\n` +
+                  `## Notes\n` +
+                  `(To be filled during the meeting)\n\n` +
+                  `## Action Items\n` +
+                  `- [ ] Review comments addressed\n` +
+                  `- [ ] Tests updated/added\n` +
+                  `- [ ] Documentation updated\n\n` +
+                  `## Next Steps\n` +
+                  `(To be determined during the meeting)`,
+          owners: attendees
+        },
+        userContext.notionToken,
+        requestId
+      );
+
+      // 6. Send comprehensive Slack notification
+      await this.slack.sendMessage(
         channel.id,
-        prDetails,
+        {
+          text: `🔍 *Code Review Scheduled: ${prDetails.title}*\n\n` +
+                `*Pull Request:* #${args.pr_number}\n` +
+                `*Fixes Issue:* #${args.issue_number}\n` +
+                `*Author:* ${prDetails.author.name}\n\n` +
+                `*Meeting Scheduled:* ${meetingTime.formatted}\n` +
+                `*Join:* ${meeting.hangoutLink || meeting.htmlLink}`,
+          blocks: [
+            {
+              type: 'header',
+              text: {
+                type: 'plain_text',
+                text: `🔍 Code Review: ${prDetails.title}`
+              }
+            },
+            {
+              type: 'section',
+              fields: [
+                {
+                  type: 'mrkdwn',
+                  text: `*Pull Request:*\n<${prDetails.urls.html}|#${args.pr_number}>`
+                },
+                {
+                  type: 'mrkdwn',
+                  text: `*Fixes Issue:*\n<${issueDetails.html_url}|#${args.issue_number}>`
+                }
+              ]
+            },
+            {
+              type: 'section',
+              fields: [
+                {
+                  type: 'mrkdwn',
+                  text: `*Author:*\n${prDetails.author.name}`
+                },
+                {
+                  type: 'mrkdwn',
+                  text: `*Reviewers:*\n${prDetails.requestedReviewers.map(r => r.name).join(', ')}`
+                }
+              ]
+            },
+            {
+              type: 'section',
+              fields: [
+                {
+                  type: 'mrkdwn',
+                  text: `*Meeting Time:*\n${meetingTime.formatted}`
+                },
+                {
+                  type: 'mrkdwn',
+                  text: `*Changes:*\n${prDetails.stats.changedFiles} files (+${prDetails.stats.additions}, -${prDetails.stats.deletions})`
+                }
+              ]
+            },
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: `*Important Links:*\n• <${meeting.hangoutLink || meeting.htmlLink}|Join Meeting>\n• <${notionPage.url}|Meeting Notes>\n• <${prDetails.urls.html}|Pull Request>\n• <${issueDetails.html_url}|Issue>`
+              }
+            },
+            {
+              type: 'context',
+              elements: [
+                {
+                  type: 'mrkdwn',
+                  text: `🔔 You'll receive a calendar invitation shortly. Please review the PR before the meeting.`
+                }
+              ]
+            }
+          ]
+        },
         userContext.slackToken,
         requestId
       );
@@ -84,11 +256,19 @@ export class WorkflowOrchestrator {
         details: {
           repository: args.repository,
           pr_number: args.pr_number,
+          issue_number: args.issue_number,
           slack_channel: `#${channel.name}`,
+          slack_url: channel.webUrl,
           github_pr: prDetails.urls.html,
+          github_issue: issueDetails.html_url,
           meeting: {
-            time: 'Will be scheduled based on team availability',
-            attendees: prDetails.requestedReviewers.map(r => r.name)
+            time: meetingTime.formatted,
+            url: meeting.hangoutLink || meeting.htmlLink,
+            attendees: attendees
+          },
+          notion: {
+            title: `Code Review: ${prDetails.title}`,
+            url: notionPage.url
           }
         }
       };
