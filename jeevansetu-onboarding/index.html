@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JeevanSetu – Digital Onboarding</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header class="app-header">
+        <div class="brand">
+            <svg class="logo" width="36" height="36" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <defs>
+                    <linearGradient id="g" x1="0" x2="1" y1="0" y2="1">
+                        <stop offset="0%" stop-color="#0EA5E9"/>
+                        <stop offset="100%" stop-color="#22C55E"/>
+                    </linearGradient>
+                </defs>
+                <path fill="url(#g)" d="M6 30c8-6 28-6 36 0v6c-8-6-28-6-36 0V30zM6 18c8-6 28-6 36 0v4c-8-6-28-6-36 0v-4z"/>
+                <circle cx="10" cy="36" r="2" fill="#0EA5E9"/>
+                <circle cx="38" cy="36" r="2" fill="#22C55E"/>
+            </svg>
+            <div>
+                <div class="brand-name">JeevanSetu</div>
+                <div class="brand-tag i18n" data-key="tagline">Your Digital Health Companion</div>
+            </div>
+        </div>
+        <div class="lang-controls">
+            <label for="lang" class="sr-only i18n" data-key="language">Language</label>
+            <select id="lang" aria-label="Language switcher">
+                <option value="en">English</option>
+                <option value="hi">हिन्दी</option>
+                <option value="ml">മലയാളം</option>
+                <option value="bn">বাংলা</option>
+            </select>
+            <button id="ttsToggle" class="btn-ghost" aria-pressed="false" aria-label="Text to speech">
+                🔊
+            </button>
+            <button id="helpBtn" class="btn-ghost">
+                ❓ <span class="i18n" data-key="help">Help</span>
+            </button>
+        </div>
+    </header>
+
+    <main class="container">
+        <section id="welcome" class="card active" aria-labelledby="welcomeTitle">
+            <div class="hero">
+                <img src="data:image/svg+xml;utf8,<?xml version='1.0' encoding='UTF-8'?><svg xmlns='http://www.w3.org/2000/svg' width='320' height='140'><rect width='100%' height='100%' fill='%23F0F9FF'/><g fill='%230EA5E9' opacity='0.7'><circle cx='40' cy='90' r='18'/><rect x='80' y='60' width='40' height='40' rx='6'/></g><g fill='%2322C55E' opacity='0.7'><rect x='140' y='70' width='50' height='30' rx='6'/><circle cx='230' cy='85' r='16'/></g><text x='12' y='28' font-family='Inter, Arial' font-size='18' fill='%23111'>Diverse Workers • Languages • Care</text></svg>" alt="Illustration of diverse workers" />
+            </div>
+            <h1 id="welcomeTitle" class="i18n" data-key="welcome">Welcome! JeevanSetu – Your Digital Health Companion</h1>
+            <p class="sub i18n" data-key="privacy_note">Your records are private and never shared without your consent.</p>
+
+            <div class="login-actions">
+                <button id="aadhaarBtn" class="btn primary">
+                    🪪 <span class="i18n" data-key="login_aadhaar">Login with Aadhaar</span>
+                </button>
+                <button id="mobileBtn" class="btn secondary">
+                    📱 <span class="i18n" data-key="login_mobile">Login with Mobile Number</span>
+                </button>
+            </div>
+            <div class="tips">
+                <button class="tip" data-tip-key="aadhaar_tip">?</button>
+                <button class="tip" data-tip-key="mobile_tip">?</button>
+            </div>
+            <p class="cta i18n" data-key="continue_language">Continue in your language</p>
+        </section>
+
+        <section id="auth" class="card" aria-live="polite">
+            <h2 class="i18n" data-key="verify_identity">Verify your identity</h2>
+            <div id="authAadhaar" class="auth-mode">
+                <label class="i18n" data-key="enter_aadhaar">Enter Aadhaar Number</label>
+                <input id="aadhaarInput" type="tel" pattern="[0-9]{12}" inputmode="numeric" maxlength="12" placeholder="0000 0000 0000" aria-describedby="aadhaarHelp" />
+                <small id="aadhaarHelp" class="muted i18n" data-key="aadhaar_privacy">Used only to verify you. We do not store your number.</small>
+                <button id="sendOtpA" class="btn primary i18n" data-key="send_otp">Send OTP</button>
+            </div>
+            <div id="authMobile" class="auth-mode hidden">
+                <label class="i18n" data-key="enter_mobile">Enter Mobile Number</label>
+                <input id="mobileInput" type="tel" pattern="[0-9]{10}" inputmode="numeric" maxlength="10" placeholder="00000 00000" />
+                <button id="sendOtpM" class="btn primary i18n" data-key="send_otp">Send OTP</button>
+            </div>
+            <div id="otpBlock" class="hidden">
+                <label class="i18n" data-key="enter_otp">Enter OTP</label>
+                <input id="otpInput" type="tel" inputmode="numeric" maxlength="6" placeholder="123456" />
+                <button id="verifyOtp" class="btn success i18n" data-key="verify">Verify</button>
+                <div id="authError" class="error" role="alert" aria-live="assertive"></div>
+            </div>
+            <div class="nav">
+                <button class="btn ghost" data-nav="back"><span class="i18n" data-key="back">Back</span></button>
+            </div>
+        </section>
+
+        <section id="firstTime" class="card" aria-live="polite">
+            <div class="progress"><div id="progressBar" style="width: 33%"></div></div>
+            <h2 class="i18n" data-key="create_or_retrieve">Create new Health ID or continue</h2>
+            <div class="choice">
+                <button id="newId" class="btn primary i18n" data-key="create_new">Create New Health ID</button>
+                <button id="existingId" class="btn secondary i18n" data-key="retrieve_existing">Retrieve Existing Record</button>
+            </div>
+            <form id="miniForm" class="stack">
+                <label class="i18n" data-key="name">Name</label>
+                <input id="name" autocomplete="name" />
+                <label class="i18n" data-key="age">Age</label>
+                <input id="age" type="number" min="1" max="120" />
+                <label class="i18n" data-key="sex">Sex</label>
+                <select id="sex">
+                    <option value="male" class="i18n" data-key="male">Male</option>
+                    <option value="female" class="i18n" data-key="female">Female</option>
+                    <option value="other" class="i18n" data-key="other">Other</option>
+                </select>
+                <label class="i18n" data-key="home_state">Home State</label>
+                <input id="home" placeholder="Bihar" />
+                <label class="i18n" data-key="occupation">Occupation</label>
+                <input id="occ" placeholder="Construction" />
+
+                <div class="photo">
+                    <label class="i18n" data-key="photo">Profile photo (optional)</label>
+                    <input id="photo" type="file" accept="image/*" />
+                </div>
+            </form>
+            <div class="nav">
+                <button class="btn ghost" data-nav="back"><span class="i18n" data-key="back">Back</span></button>
+                <button id="toConsent" class="btn success"><span class="i18n" data-key="continue">Continue</span> ✅</button>
+            </div>
+        </section>
+
+        <section id="consent" class="card" aria-live="polite">
+            <div class="progress"><div style="width: 66%"></div></div>
+            <h2 class="i18n" data-key="you_control">You control your data</h2>
+            <ul class="bullets">
+                <li class="i18n" data-key="secure">Your health data is secure.</li>
+                <li class="i18n" data-key="access">Only you and authorized doctors can see it.</li>
+                <li class="i18n" data-key="alerts">You receive an alert whenever your data is accessed.</li>
+            </ul>
+            <div class="nav">
+                <button class="btn ghost" data-nav="back"><span class="i18n" data-key="back">Back</span></button>
+                <button id="agree" class="btn primary i18n" data-key="agree">I Agree</button>
+            </div>
+        </section>
+
+        <section id="notify" class="card" aria-live="polite">
+            <div class="progress"><div style="width: 100%"></div></div>
+            <h2 class="i18n" data-key="allow_notifications">Allow notifications to stay updated about your health!</h2>
+            <div class="preview">
+                <div class="notif">🔔 <span class="i18n" data-key="notif_example">You have a check-up tomorrow—tap to confirm!</span></div>
+            </div>
+            <div class="nav">
+                <button class="btn ghost" data-nav="back"><span class="i18n" data-key="back">Back</span></button>
+                <button id="enableNotify" class="btn success i18n" data-key="enable">Enable</button>
+            </div>
+        </section>
+
+        <section id="success" class="card" aria-live="polite">
+            <h2>✅ <span class="i18n" data-key="success_created">Success! Your JeevanSetu Health ID has been created.</span></h2>
+            <div class="health-card">
+                <div class="hc-head">
+                    <span class="brand-small">JeevanSetu</span>
+                    <span class="hc-id" id="hcId">JS-XXXX-XXXX</span>
+                </div>
+                <div class="hc-body">
+                    <canvas id="qr" width="120" height="120" aria-label="QR"></canvas>
+                    <div class="hc-name" id="hcName">—</div>
+                </div>
+            </div>
+            <p class="muted i18n" data-key="no_reminders">You have no current reminders.</p>
+            <div class="nav">
+                <button id="simulateReminder" class="btn secondary i18n" data-key="simulate_notif">Simulate notification</button>
+                <button id="startUsing" class="btn primary i18n" data-key="start_using">Start using JeevanSetu</button>
+            </div>
+        </section>
+    </main>
+
+    <footer class="app-footer">
+        <button id="why" class="link i18n" data-key="why_js">Why JeevanSetu?</button>
+        <span class="motivate i18n" data-key="motivate">Your health journey starts here. Safe, connected, and fair healthcare—anywhere you go!</span>
+    </footer>
+
+    <dialog id="helpDialog">
+        <h3 class="i18n" data-key="need_help">Need help?</h3>
+        <p class="i18n" data-key="help_text">Tap call to connect with a health worker, or chat with our assistant.</p>
+        <div class="nav">
+            <a href="tel:+911234567890" class="btn primary">📞 <span class="i18n" data-key="call">Call</span></a>
+            <button id="chat" class="btn secondary">💬 <span class="i18n" data-key="chat">Chat</span></button>
+            <button data-close class="btn ghost"><span class="i18n" data-key="close">Close</span></button>
+        </div>
+    </dialog>
+
+    <dialog id="tipDialog">
+        <p id="tipText">—</p>
+        <div class="nav">
+            <button data-close class="btn primary"><span class="i18n" data-key="ok">OK</span></button>
+        </div>
+    </dialog>
+
+    <script src="app.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js').catch(() => {});
+        }
+    </script>
+</body>
+</html>
+
